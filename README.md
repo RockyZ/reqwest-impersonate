@@ -13,7 +13,7 @@ These patches were made specifically for `reqwest` to work, but I would apprecia
 `Cargo.toml`
 
 ```toml
-reqwest = { package = "reqwest-impersonate", version = "0.11.30", default-features = false, features = [
+reqwest = { package = "reqwest-impersonate", version = "0.11.46", default-features = false, features = [
     "boring-tls",
     "impersonate",
     "blocking",
@@ -28,15 +28,30 @@ use reqwest_impersonate as reqwest;
 fn main() {
     // Build a client to mimic OkHttpAndroid13
     let client = reqwest::blocking::Client::builder()
-        .impersonate(reqwest::impersonate::Impersonate::OkHttp5)
+        .impersonate(reqwest::impersonate::Impersonate::Chrome120)
+        .enable_ech_grease(true)
+        .permute_extensions(true)
         .cookie_store(true)
         .tls_info(true)
         .build()
         .unwrap();
 
     // Use the API you're already familiar with
+    // https://tls.peet.ws/api/all
+    // https://chat.openai.com/backend-api/models
+    // https://chat.openai.com/backend-api/conversation
+    // https://order.surfshark.com/api/v1/account/users?source=surfshark
+    match client.get("https://tls.peet.ws/api/all").send() {
+        Ok(res) => {
+            println!("{}", res.text().unwrap());
+        }
+        Err(err) => {
+            dbg!(err);
+        }
+    };
+
     match client
-        .get("https://tls.peet.ws/api/all")
+        .post("https://chat.openai.com/backend-api/conversation")
         .send()
     {
         Ok(res) => {
@@ -46,6 +61,7 @@ fn main() {
             dbg!(err);
         }
     };
+
 }
 
 ```
@@ -118,7 +134,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 On Linux:
 
-- OpenSSL 1.0.1, 1.0.2, 1.1.0, or 1.1.1 with headers (see <https://github.com/sfackler/rust-openssl>)
+- OpenSSL with headers. See https://docs.rs/openssl for supported versions
+  and more details. Alternatively you can enable the `native-tls-vendored`
+  feature to compile a copy of OpenSSL.
 
 On Windows and macOS:
 
@@ -127,6 +145,7 @@ On Windows and macOS:
 Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
 which will use the operating system TLS framework if available, meaning Windows
 and macOS. On Linux, it will use OpenSSL 1.1.
+
 
 ## License
 

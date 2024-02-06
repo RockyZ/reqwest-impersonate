@@ -1,27 +1,29 @@
+use std::sync::Arc;
+
 use boring::ssl::{
     CertCompressionAlgorithm, SslConnector, SslConnectorBuilder, SslMethod, SslVersion,
 };
 use http::{
-    header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, USER_AGENT},
+    header::{
+        ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, DNT, UPGRADE_INSECURE_REQUESTS, USER_AGENT,
+    },
     HeaderMap,
 };
-use std::sync::Arc;
 
-use crate::impersonate::profile::ClientProfile;
 use crate::impersonate::{Http2Data, ImpersonateSettings};
 
-pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
+pub(crate) fn get_settings(headers: HeaderMap) -> ImpersonateSettings {
     ImpersonateSettings {
         tls_builder_func: Arc::new(create_ssl_connector),
         http2: Http2Data {
-            initial_stream_window_size: Some(4194304),
-            initial_connection_window_size: Some(10551295),
-            max_concurrent_streams: Some(100),
-            max_header_list_size: None,
-            header_table_size: None,
-            enable_push: None,
+            initial_stream_window_size: Some(6291456),
+            initial_connection_window_size: Some(15728640),
+            max_concurrent_streams: Some(1000),
+            max_header_list_size: Some(262144),
+            header_table_size: Some(65536),
+            enable_push: Some(false),
         },
-        headers: create_headers(profile),
+        headers: create_headers(headers),
         gzip: true,
         brotli: true,
     }
@@ -30,37 +32,28 @@ pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
 fn create_ssl_connector() -> SslConnectorBuilder {
     let mut builder = SslConnector::builder(SslMethod::tls_client()).unwrap();
 
+    builder.set_default_verify_paths().unwrap();
+
     builder.set_grease_enabled(true);
 
     builder.enable_ocsp_stapling();
 
     let cipher_list = [
+        "TLS_AES_128_GCM_SHA256",
         "TLS_AES_256_GCM_SHA384",
         "TLS_CHACHA20_POLY1305_SHA256",
-        "TLS_AES_128_GCM_SHA256",
-        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
-        "TLS_RSA_WITH_AES_128_GCM_SHA256",
         "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
-        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
-        "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
-        "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
-        "TLS_RSA_WITH_AES_256_CBC_SHA",
-        "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
-        "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
-        "TLS_RSA_WITH_AES_256_CBC_SHA256",
-        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-        "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
         "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
         "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
         "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
         "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_RSA_WITH_AES_128_GCM_SHA256",
         "TLS_RSA_WITH_AES_256_GCM_SHA384",
         "TLS_RSA_WITH_AES_128_CBC_SHA",
-        "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
-        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
-        "TLS_RSA_WITH_AES_128_CBC_SHA256",
-        "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA",
+        "TLS_RSA_WITH_AES_256_CBC_SHA",
     ];
 
     builder.set_cipher_list(&cipher_list.join(":")).unwrap();
@@ -87,7 +80,7 @@ fn create_ssl_connector() -> SslConnectorBuilder {
         .unwrap();
 
     builder
-        .set_min_proto_version(Some(SslVersion::TLS1_1))
+        .set_min_proto_version(Some(SslVersion::TLS1_2))
         .unwrap();
 
     builder
@@ -97,20 +90,24 @@ fn create_ssl_connector() -> SslConnectorBuilder {
     builder
 }
 
-fn create_headers(_profile: ClientProfile) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-
+fn create_headers(mut headers: HeaderMap) -> HeaderMap {
     headers.insert(
-        ACCEPT,
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "sec-ch-ua",
+        "\"Chromium\";v=\"106\", \"Google Chrome\";v=\"106\", \"Not;A=Brand\";v=\"99\""
             .parse()
             .unwrap(),
     );
+    headers.insert("sec-ch-ua-mobile", "?0".parse().unwrap());
+    headers.insert("sec-ch-ua-platform", "\"Windows\"".parse().unwrap());
+    headers.insert(DNT, "1".parse().unwrap());
+    headers.insert(UPGRADE_INSECURE_REQUESTS, "1".parse().unwrap());
+    headers.insert(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36".parse().unwrap());
+    headers.insert(ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9".parse().unwrap());
     headers.insert("sec-fetch-site", "none".parse().unwrap());
-    headers.insert(ACCEPT_ENCODING, "gzip, deflate, br".parse().unwrap());
     headers.insert("sec-fetch-mode", "navigate".parse().unwrap());
-    headers.insert(USER_AGENT, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_2_2) AppleWebKit/617.25.9 (KHTML, like Gecko) Version/12.1.21 Safari/617.25.9".parse().unwrap());
+    headers.insert("sec-fetch-user", "?1".parse().unwrap());
     headers.insert("sec-fetch-dest", "document".parse().unwrap());
+    headers.insert(ACCEPT_ENCODING, "gzip, deflate, br".parse().unwrap());
     headers.insert(ACCEPT_LANGUAGE, "en-US,en;q=0.9".parse().unwrap());
 
     headers

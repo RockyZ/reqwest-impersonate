@@ -5,10 +5,9 @@ use http::{
 };
 use std::sync::Arc;
 
-use crate::impersonate::profile::ClientProfile;
 use crate::impersonate::{Http2Data, ImpersonateSettings};
 
-pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
+pub(crate) fn get_settings(headers: HeaderMap) -> ImpersonateSettings {
     ImpersonateSettings {
         tls_builder_func: Arc::new(create_ssl_connector),
         http2: Http2Data {
@@ -19,7 +18,7 @@ pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
             header_table_size: None,
             enable_push: None,
         },
-        headers: create_headers(profile),
+        headers: create_headers(headers),
         gzip: true,
         brotli: true,
     }
@@ -28,6 +27,8 @@ pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
 fn create_ssl_connector() -> SslConnectorBuilder {
     let mut builder = SslConnector::builder(SslMethod::tls_client()).unwrap();
 
+    builder.set_default_verify_paths().unwrap();
+
     builder.enable_ocsp_stapling();
 
     builder
@@ -35,9 +36,6 @@ fn create_ssl_connector() -> SslConnectorBuilder {
         .unwrap();
 
     let cipher_list = [
-        "TLS_AES_128_GCM_SHA256",
-        "TLS_AES_256_GCM_SHA384",
-        "TLS_CHACHA20_POLY1305_SHA256",
         "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
         "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
         "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
@@ -82,16 +80,14 @@ fn create_ssl_connector() -> SslConnectorBuilder {
     builder
 }
 
-fn create_headers(profile: ClientProfile) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-
+fn create_headers(mut headers: HeaderMap) -> HeaderMap {
     headers.insert(ACCEPT, "*/*".parse().unwrap());
     headers.insert(
         ACCEPT_LANGUAGE,
         "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7".parse().unwrap(),
     );
-    headers.insert(USER_AGENT, "okhttp/5.0.0-alpha2".parse().unwrap());
+    headers.insert(USER_AGENT, "okhttp/3.11".parse().unwrap());
     headers.insert(ACCEPT_ENCODING, "gzip, deflate, br".parse().unwrap());
-    headers.insert("client_profile", profile.to_string().parse().unwrap());
+
     headers
 }

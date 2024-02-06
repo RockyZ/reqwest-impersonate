@@ -1,19 +1,15 @@
-use std::sync::Arc;
-
 use boring::ssl::{
     CertCompressionAlgorithm, SslConnector, SslConnectorBuilder, SslMethod, SslVersion,
 };
 use http::{
-    header::{
-        ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, DNT, UPGRADE_INSECURE_REQUESTS, USER_AGENT,
-    },
-    HeaderMap,
+    header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, UPGRADE_INSECURE_REQUESTS, USER_AGENT},
+    HeaderMap, HeaderValue,
 };
+use std::sync::Arc;
 
-use crate::impersonate::profile::ClientProfile;
 use crate::impersonate::{Http2Data, ImpersonateSettings};
 
-pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
+pub(crate) fn get_settings(headers: HeaderMap) -> ImpersonateSettings {
     ImpersonateSettings {
         tls_builder_func: Arc::new(create_ssl_connector),
         http2: Http2Data {
@@ -22,9 +18,9 @@ pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
             max_concurrent_streams: Some(1000),
             max_header_list_size: Some(262144),
             header_table_size: Some(65536),
-            enable_push: Some(false),
+            enable_push: None,
         },
-        headers: create_headers(profile),
+        headers: create_headers(headers),
         gzip: true,
         brotli: true,
     }
@@ -32,6 +28,8 @@ pub(super) fn get_settings(profile: ClientProfile) -> ImpersonateSettings {
 
 fn create_ssl_connector() -> SslConnectorBuilder {
     let mut builder = SslConnector::builder(SslMethod::tls_client()).unwrap();
+
+    builder.set_default_verify_paths().unwrap();
 
     builder.set_grease_enabled(true);
 
@@ -89,28 +87,24 @@ fn create_ssl_connector() -> SslConnectorBuilder {
     builder
 }
 
-fn create_headers(profile: ClientProfile) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-
+fn create_headers(mut headers: HeaderMap) -> HeaderMap {
     headers.insert(
         "sec-ch-ua",
-        "\"Chromium\";v=\"106\", \"Google Chrome\";v=\"106\", \"Not;A=Brand\";v=\"99\""
-            .parse()
-            .unwrap(),
+        HeaderValue::from_static(
+            r#"" Not A;Brand";v="99", "Chromium";v="101", "Microsoft Edge";v="101""#,
+        ),
     );
     headers.insert("sec-ch-ua-mobile", "?0".parse().unwrap());
     headers.insert("sec-ch-ua-platform", "\"Windows\"".parse().unwrap());
-    headers.insert(DNT, "1".parse().unwrap());
     headers.insert(UPGRADE_INSECURE_REQUESTS, "1".parse().unwrap());
-    headers.insert(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36".parse().unwrap());
-    headers.insert(ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9".parse().unwrap());
+    headers.insert(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36 Edg/101.0.1210.47".parse().unwrap());
+    headers.insert(ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9".parse().unwrap());
     headers.insert("sec-fetch-site", "none".parse().unwrap());
     headers.insert("sec-fetch-mode", "navigate".parse().unwrap());
     headers.insert("sec-fetch-user", "?1".parse().unwrap());
     headers.insert("sec-fetch-dest", "document".parse().unwrap());
     headers.insert(ACCEPT_ENCODING, "gzip, deflate, br".parse().unwrap());
     headers.insert(ACCEPT_LANGUAGE, "en-US,en;q=0.9".parse().unwrap());
-    headers.insert("client_profile", profile.to_string().parse().unwrap());
 
     headers
 }
